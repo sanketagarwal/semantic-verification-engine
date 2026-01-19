@@ -1,393 +1,330 @@
-# 🔬 Semantic Verification Engine
+# Semantic Verification Engine
 
-> **LLM-powered cross-platform prediction market verification**
-> 
-> Detects resolution criteria misalignments between Kalshi and Polymarket to prevent arbitrage losses from rule ambiguity.
+> **LLM-powered semantic verification for prediction market arbitrage**
 
-[![npm version](https://img.shields.io/npm/v/semantic-verification-engine.svg)](https://www.npmjs.com/package/semantic-verification-engine)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
-
----
+This engine compares resolution criteria between Kalshi and Polymarket markets to detect technical misalignments that could cause bad trades due to rule ambiguity.
 
 ## 🎯 The Problem
 
-Cross-platform prediction market arbitrage is risky because **markets that appear identical may resolve differently**:
-
-| Platform | Question | Price |
-|----------|----------|-------|
-| Kalshi | "Will the Fed cut rates in January 2026?" | 72¢ |
-| Polymarket | "Will the Federal Reserve cut interest rates in January 2026?" | 68¢ |
-
-**Looks like a 4¢ arbitrage opportunity!** But wait...
-
-- 📅 **Date Mismatch**: Kalshi resolves at market close on 1/31, Polymarket at 11:59 PM UTC
-- 📰 **Source Difference**: Kalshi uses FOMC statement, Polymarket uses Federal Reserve website
-- 📏 **Threshold Ambiguity**: What if the Fed holds rates steady at a meeting vs. between meetings?
-
-**This engine prevents costly mistakes by using LLMs to semantically compare resolution criteria.**
-
----
-
-## ✨ Features
-
-- 🤖 **LLM-Powered Analysis** - GPT-4o compares resolution criteria semantically
-- 🔍 **6 Misalignment Types** - Date, Source, Scope, Threshold, Definition, Edge Cases
-- 📊 **Risk Scoring** - LOW / MEDIUM / HIGH / CRITICAL risk levels
-- 💡 **Trading Recommendations** - SAFE_TO_TRADE, PROCEED_WITH_CAUTION, AVOID, MANUAL_REVIEW
-- ⚡ **Fast Batch Processing** - Quick similarity scoring for filtering
-- 🛠️ **CLI + Library** - Use as command-line tool or import in your code
-
----
-
-## 📦 Installation
-
-```bash
-# npm
-npm install semantic-verification-engine
-
-# pnpm
-pnpm add semantic-verification-engine
-
-# yarn
-yarn add semantic-verification-engine
-```
-
-### Environment Setup
-
-Create a `.env` file:
-
-```env
-# Required: OpenAI API key for LLM semantic analysis
-OPENAI_API_KEY=sk-your-openai-key-here
-
-# Required: Replay Labs API key for all market data
-REPLAY_LABS_API_KEY=your-replay-labs-api-key
-
-# Optional: Replay Labs API base URL
-REPLAY_LABS_BASE_URL=https://api.replaylabs.io
-
-# Optional: Use specific model (default: openai/gpt-4o)
-AI_MODEL=openai/gpt-4o
-```
-
----
-
-## 🚀 Quick Start
-
-### CLI Usage
-
-```bash
-# Verify markets by topic
-npx verify-markets --topic "Fed rates"
-
-# Verify a specific pair
-npx verify-markets pair --kalshi "FED-26JAN-T4.50" --polymarket "fed-rate-jan-2026"
-
-# Run demo
-npx verify-markets demo
-```
-
-### Library Usage
-
-```typescript
-import { runVerificationAgent, quickVerify } from 'semantic-verification-engine';
-
-// Full verification for a topic
-const result = await runVerificationAgent('Fed rates');
-
-console.log(`Found ${result.matchedPairs.length} market pairs`);
-console.log(`Safe to trade: ${result.statistics.safeToTrade}`);
-console.log(`Should avoid: ${result.statistics.avoid}`);
-
-// Iterate through matched pairs
-for (const pair of result.matchedPairs) {
-  console.log(`
-    Kalshi: ${pair.kalshi.ticker} @ ${pair.kalshi.price}
-    Polymarket: ${pair.polymarket.id} @ ${pair.polymarket.price}
-    Spread: ${pair.priceSpread}¢
-    Recommendation: ${pair.verification.recommendation}
-    Misalignments: ${pair.verification.misalignments.length}
-  `);
-}
-```
-
----
-
-## 📖 API Reference
-
-### `runVerificationAgent(topic: string)`
-
-Full workflow: searches both platforms, finds matches, and verifies each pair.
-
-```typescript
-const result = await runVerificationAgent('Bitcoin');
-
-// Returns:
-{
-  topic: 'Bitcoin',
-  timestamp: '2026-01-19T...',
-  matchedPairs: [...],
-  summary: 'Found 3 potential market matches...',
-  statistics: {
-    marketsScanned: { kalshi: 15, polymarket: 20 },
-    matchesFound: 3,
-    safeToTrade: 1,
-    proceedWithCaution: 1,
-    avoid: 1,
-    needsReview: 0
-  }
-}
-```
-
-### `quickVerify(kalshiTicker, polymarketId)`
-
-Fast verification for a specific pair.
-
-```typescript
-const check = await quickVerify('BTC-26JAN-100K', 'btc-100k-jan-2026');
-
-// Returns:
-{
-  verified: true,
-  confidence: 0.85,
-  recommendation: 'PROCEED_WITH_CAUTION',
-  topMisalignment: 'Polymarket uses "reach" while Kalshi uses "above" - edge case at exact threshold'
-}
-```
-
-### `getVerifiedArbitrageOpportunities(topic)`
-
-Returns only verified safe opportunities sorted by spread.
-
-```typescript
-const { opportunities, summary } = await getVerifiedArbitrageOpportunities('inflation');
-
-for (const opp of opportunities) {
-  console.log(`${opp.kalshiTicker} vs ${opp.polymarketId}: ${opp.spread}¢ spread`);
-}
-```
-
-### Tool Functions
-
-For more granular control, use the individual tools:
-
-```typescript
-import { 
-  verifyMarketPair,      // LLM verification of a single pair
-  findMatchingMarkets,   // Semantic search for matches
-  batchVerifyMarkets,    // Quick batch verification
-  generateVerificationReport,  // Detailed report generation
-  searchKalshiMarkets,   // Search Kalshi
-  searchPolymarketMarkets,    // Search Polymarket
-} from 'semantic-verification-engine';
-```
-
----
-
-## 🔍 Misalignment Types
-
-The engine detects 6 types of resolution criteria misalignments:
-
-| Type | Icon | Description | Example |
-|------|------|-------------|---------|
-| `RESOLUTION_DATE` | 📅 | Different resolution timing | "by Jan 31" vs "on Jan 31" |
-| `RESOLUTION_SOURCE` | 📰 | Different data sources | BLS website vs press release |
-| `SCOPE` | 🌍 | Geographic/coverage differences | US-only vs global |
-| `THRESHOLD` | 📏 | Numeric threshold differences | ">3%" vs "≥3%" |
-| `DEFINITION` | 📖 | Term/concept definitions | "recession" definition varies |
-| `EDGE_CASE` | ⚠️ | Handling of special scenarios | Ties, delays, cancellations |
-
-### Severity Levels
-
-- **LOW**: Minor wording differences, unlikely to affect outcome
-- **MEDIUM**: Notable differences that could matter in edge cases
-- **HIGH**: Significant differences with material impact risk
-- **CRITICAL**: Markets may resolve differently - avoid trading
-
----
-
-## 📊 Output Examples
-
-### CLI Output
-
-```
-╔═══════════════════════════════════════════════════════════════════════╗
-║  🔬 SEMANTIC VERIFICATION ENGINE                                      ║
-║  LLM-powered cross-platform market verification                       ║
-╚═══════════════════════════════════════════════════════════════════════╝
-
-🔍 TOPIC:
-   "Fed rates"
-
-✔ Verification complete in 3245ms
-
-📊 VERIFICATION STATISTICS:
-────────────────────────────────────────────────────────────────
-   Markets Scanned:  5 Kalshi, 5 Polymarket
-   Matches Found:    2
-   Safe to Trade:    1
-   Proceed Caution:  1
-   Avoid:            0
-   Needs Review:     0
-
-🎯 MATCHED MARKET PAIRS:
-
-┌────────────────────────────────────────────────────────────────────────┐
-│ 1. ✅ SAFE TO TRADE                                                    │
-│ Confidence: 92% | Risk: LOW | Spread: 4¢                              │
-├────────────────────────────────────────────────────────────────────────┤
-│ KALSHI:
-│   Ticker: FED-26JAN-T4.50
-│   Will the Fed cut rates in January 2026?
-│   Price: 72¢
-│
-│ POLYMARKET:
-│   ID: fed-rate-jan-2026
-│   Will the Federal Reserve cut interest rates in January 2026?
-│   Price: 68¢
-├────────────────────────────────────────────────────────────────────────┤
-│ 💰 ARBITRAGE OPPORTUNITY DETECTED!                                     │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
-### JSON Response
-
-```json
-{
-  "matchedPairs": [{
-    "kalshi": {
-      "ticker": "FED-26JAN-T4.50",
-      "question": "Will the Fed cut rates in January 2026?",
-      "price": 0.72
-    },
-    "polymarket": {
-      "id": "fed-rate-jan-2026", 
-      "question": "Will the Federal Reserve cut interest rates in January 2026?",
-      "price": 0.68
-    },
-    "verification": {
-      "isMatch": true,
-      "matchConfidence": 0.92,
-      "riskLevel": "LOW",
-      "recommendation": "SAFE_TO_TRADE",
-      "misalignments": []
-    },
-    "priceSpread": 4,
-    "arbitrageOpportunity": true
-  }]
-}
-```
-
----
+When trading across prediction market platforms, seemingly identical markets can have **subtle differences** in their resolution criteria that cause them to resolve differently:
+
+- **Different expiration times**: One market closes at midnight UTC, another at midnight EST
+- **Different data sources**: One uses BLS data, another uses Fed reports
+- **Scope differences**: "US recession" vs "North American recession"
+- **Threshold ambiguity**: "Above 3%" vs "at or above 3%"
+
+## ✨ The Solution
+
+Our fine-tuned LLM models:
+1. **Semantically match** markets across platforms
+2. **Compare resolution criteria** to detect misalignments
+3. **Classify risk levels** (LOW → CRITICAL)
+4. **Generate recommendations** (SAFE_TO_TRADE, PROCEED_WITH_CAUTION, AVOID, MANUAL_REVIEW)
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Verification Pipeline                         │
+│                    Data Sources                                  │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. MARKET DATA (via Replay Labs)                               │
-│     ├─> GET /api/kalshi/markets                                 │
-│     ├─> GET /api/polymarket/markets                             │
-│     └─> GET /api/matched-pairs (pre-matched registry)           │
-│                                                                 │
-│  2. SEMANTIC MATCHING                                           │
-│     └─> LLM finds candidate pairs by topic similarity           │
-│                                                                 │
-│  3. DEEP VERIFICATION                                           │
-│     └─> LLM compares resolution criteria:                       │
-│         - Question semantics                                    │
-│         - Resolution timing                                     │
-│         - Data sources                                          │
-│         - Threshold definitions                                 │
-│         - Edge case handling                                    │
-│                                                                 │
-│  4. RECOMMENDATION                                              │
-│     └─> SAFE_TO_TRADE | CAUTION | AVOID | REVIEW                │
-│                                                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
+│  │  Kalshi API  │  │ Polymarket   │  │    Replay Labs       │   │
+│  │  (Discovery) │  │ Gamma API    │  │    WebSocket         │   │
+│  │              │  │ (Discovery)  │  │    (Real-time data)  │   │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘   │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Semantic Verification Engine                        │
+├─────────────────────────────────────────────────────────────────┤
+│  1. Market Discovery    → Find markets on both platforms        │
+│  2. Semantic Matching   → Match equivalent markets              │
+│  3. Criteria Extraction → Parse resolution rules                │
+│  4. LLM Verification    → Compare criteria, detect misalignment │
+│  5. Risk Assessment     → Classify and recommend                │
 └─────────────────────────────────────────────────────────────────┘
-
-Data Flow:
-  Replay Labs API ──> Kalshi + Polymarket Data ──> LLM Analysis ──> Recommendations
 ```
 
----
+## 🔌 Data Sources
 
-## 🧪 Testing
+### Replay Labs API (Primary)
+Real-time market data streaming via WebSocket:
+- **Kalshi**: Orderbook snapshots, deltas, ticker, trades
+- **Polymarket**: Price book, trades, last trade price, ticker
+- **Coinbase**: OHLCV, indicators, orderbook (crypto reference data)
+
+### Venue APIs (Discovery)
+- **Kalshi API**: Market search and metadata
+- **Polymarket Gamma API**: Market search and metadata
+
+## 📦 Installation
 
 ```bash
+npm install semantic-verification-engine
+```
+
+## ⚙️ Configuration
+
+```bash
+# .env file
+OPENAI_API_KEY=sk-...           # Required for LLM verification
+REPLAY_LABS_API_KEY=rl-...      # Required for real-time data
+KALSHI_API_KEY=...              # Optional, enhances discovery
+KALSHI_USE_DEMO=false           # Set true for demo environment
+```
+
+## 🚀 Quick Start
+
+### As a Library
+
+```typescript
+import { 
+  runVerificationAgent, 
+  quickVerify,
+  getVerifiedArbitrageOpportunities 
+} from 'semantic-verification-engine';
+
+// Full verification workflow for a topic
+const result = await runVerificationAgent('Fed interest rates');
+
+console.log(result.summary);
+console.log(`Found ${result.matchedPairs.length} verified pairs`);
+
+// Quick verification of a known pair
+const verification = await quickVerify(
+  'FED-26JAN-T4.50',  // Kalshi ticker
+  'fed-rate-jan-2026' // Polymarket ID
+);
+
+console.log(`Verified: ${verification.verified}`);
+console.log(`Recommendation: ${verification.recommendation}`);
+
+// Get all safe arbitrage opportunities
+const opportunities = await getVerifiedArbitrageOpportunities('Fed rates');
+
+opportunities.forEach(opp => {
+  console.log(`
+    Kalshi ${opp.kalshiTicker}: ${opp.kalshiPrice}
+    Polymarket ${opp.polymarketId}: ${opp.polymarketPrice}
+    Spread: ${(opp.spread * 100).toFixed(1)}%
+    Safe: ${opp.verified}
+  `);
+});
+```
+
+### Using Individual Tools
+
+```typescript
+import { 
+  searchKalshiMarkets,
+  searchPolymarketMarkets,
+  verifyMarketPair,
+  buildWebSocketPayload,
+} from 'semantic-verification-engine';
+
+// Search markets
+const kalshiMarkets = await searchKalshiMarkets.execute({ 
+  query: 'recession',
+  limit: 10 
+});
+
+const polyMarkets = await searchPolymarketMarkets.execute({ 
+  query: 'recession',
+  limit: 10 
+});
+
+// Verify a pair
+const result = await verifyMarketPair.execute({
+  kalshiMarket: {
+    platform: 'kalshi',
+    marketId: 'RECESSION-26',
+    question: 'Will there be a US recession in 2026?',
+    resolutionSource: 'NBER',
+    resolutionDate: '2026-12-31',
+  },
+  polymarketMarket: {
+    platform: 'polymarket',
+    marketId: 'recession-2026',
+    question: 'Will the US enter a recession in 2026?',
+    resolutionSource: 'NBER official dating',
+    resolutionDate: '2026-12-31',
+  }
+});
+
+console.log(`Match: ${result.isMatch}`);
+console.log(`Confidence: ${(result.matchConfidence * 100).toFixed(0)}%`);
+console.log(`Risk: ${result.riskLevel}`);
+console.log(`Recommendation: ${result.recommendation}`);
+
+// Get WebSocket config for real-time data
+const wsConfig = await buildWebSocketPayload.execute({
+  venue: 'KALSHI',
+  channels: ['orderbook_delta'],
+  markets: ['RECESSION-26'],
+});
+
+console.log(`Connect to: ${wsConfig.wsUrl}`);
+console.log(`Subscribe with:`, wsConfig.subscribePayloads);
+```
+
+### CLI Usage
+
+```bash
+# Verify markets for a topic
+npx svc verify "Fed rates"
+
+# Quick verification of a specific pair
+npx svc verify --kalshi FED-26JAN-T4.50 --polymarket fed-rate-jan-2026
+
+# Get arbitrage opportunities
+npx svc arbitrage "recession"
+
+# List WebSocket venues
+npx svc venues
+```
+
+## 📊 Misalignment Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `RESOLUTION_DATE` | Different expiration/resolution times | Jan 31 vs Feb 1 |
+| `RESOLUTION_SOURCE` | Different data sources for resolution | BLS vs Fed data |
+| `SCOPE` | Geographic or demographic differences | US vs North America |
+| `THRESHOLD` | Numeric threshold differences | "above 3%" vs "≥3%" |
+| `DEFINITION` | Core concept defined differently | "recession" definitions |
+| `EDGE_CASE` | Edge cases handled differently | Holiday adjustments |
+
+## 🚦 Risk Levels & Recommendations
+
+| Risk Level | Recommendation | Action |
+|------------|----------------|--------|
+| `LOW` | `SAFE_TO_TRADE` | Execute arbitrage with confidence |
+| `MEDIUM` | `PROCEED_WITH_CAUTION` | Trade with smaller position sizes |
+| `HIGH` | `AVOID` | Do not trade this pair |
+| `CRITICAL` | `MANUAL_REVIEW` | Requires human verification |
+
+## 🔧 Available Tools
+
+### Market Discovery
+- `searchKalshiMarkets` - Search Kalshi markets by keyword
+- `searchPolymarketMarkets` - Search Polymarket markets by keyword
+
+### Real-Time Data (via Replay Labs)
+- `listWebSocketVenues` - List available WebSocket venues
+- `buildWebSocketPayload` - Build WS connection config for venue
+- `getKalshiOrderbook` - Get Kalshi orderbook WS config
+- `getPolymarketOrderbook` - Get Polymarket orderbook WS config
+- `getOHLCV` - Get OHLCV candles (Coinbase)
+- `getIndicators` - Get computed indicators (RSI, MACD, etc.)
+- `listReplays` - List available market data time ranges
+
+### Verification
+- `verifyMarketPair` - LLM-powered verification of market pair
+- `findMatchingMarkets` - Find semantically matching markets
+- `generateVerificationReport` - Generate detailed verification report
+- `batchVerifyMarkets` - Batch verification of multiple pairs
+- `getVerifiedPairs` - Get pre-verified market pairs
+
+## 📋 Example Output
+
+```typescript
+const result = await runVerificationAgent('Bitcoin price');
+
+// result.matchedPairs[0]:
+{
+  kalshi: {
+    ticker: 'BTC-26JAN-100K',
+    question: 'Will Bitcoin be above $100,000 by end of January 2026?',
+    price: 0.62
+  },
+  polymarket: {
+    id: 'btc-100k-jan-2026',
+    question: 'Will Bitcoin reach $100,000 by January 31, 2026?',
+    price: 0.58
+  },
+  verification: {
+    isMatch: true,
+    matchConfidence: 0.92,
+    riskLevel: 'MEDIUM',
+    recommendation: 'PROCEED_WITH_CAUTION',
+    misalignments: [
+      {
+        type: 'THRESHOLD',
+        severity: 'MEDIUM',
+        description: '"above $100,000" vs "reach $100,000" - unclear if exactly $100k qualifies'
+      }
+    ]
+  },
+  priceSpread: 0.04,
+  arbitrageOpportunity: true
+}
+```
+
+## 🔗 WebSocket Data Streaming
+
+Real-time data is available via Replay Labs WebSocket:
+
+```typescript
+import { buildWebSocketPayload } from 'semantic-verification-engine';
+
+// Get WebSocket config
+const config = await buildWebSocketPayload.execute({
+  venue: 'KALSHI',
+  channels: ['orderbook_delta', 'ticker'],
+  markets: ['FED-26JAN-T4.50'],
+});
+
+// Connect to WebSocket
+const ws = new WebSocket(config.wsUrl);
+
+ws.onopen = () => {
+  // Send subscribe payloads
+  config.subscribePayloads.forEach(payload => {
+    ws.send(JSON.stringify(payload));
+  });
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  // Handle orderbook/ticker updates
+  console.log('Market update:', data);
+};
+```
+
+### Available Channels
+
+| Venue | Channels |
+|-------|----------|
+| KALSHI | `orderbook_delta`, `ticker`, `trade` |
+| POLYMARKET | `price_book`, `trade`, `last_trade_price`, `ticker` |
+
+## 🧪 Development
+
+```bash
+# Clone and install
+git clone https://github.com/yourusername/semantic-verification-engine.git
+cd semantic-verification-engine
+npm install
+
+# Build
+npm run build
+
 # Run tests
-pnpm test
+npm test
 
-# Type check
-pnpm typecheck
-
-# Lint
-pnpm lint
+# Development mode
+npm run dev
 ```
-
----
-
-## 📁 Project Structure
-
-```
-semantic-verification-engine/
-├── src/
-│   ├── index.ts           # Main exports
-│   ├── agent.ts           # Verification agent
-│   ├── cli.ts             # CLI entry point
-│   ├── types.ts           # TypeScript types
-│   └── tools/
-│       ├── index.ts       # Tool exports
-│       ├── verification.ts # Core verification tools
-│       └── market-apis.ts  # Kalshi/Polymarket APIs
-├── package.json
-├── tsconfig.json
-├── .env.example
-└── README.md
-```
-
----
-
-## 🔑 Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `OPENAI_API_KEY` | ✅ Yes | OpenAI API key for LLM semantic analysis |
-| `REPLAY_LABS_API_KEY` | ✅ Yes | Replay Labs API key for all market data |
-| `REPLAY_LABS_BASE_URL` | No | Replay Labs API URL (default: `https://api.replaylabs.io`) |
-| `AI_MODEL` | No | LLM model to use (default: `openai/gpt-4o`) |
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please read our contributing guidelines first.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
 
 ## 📄 License
 
-MIT © Sanket Agarwal
+MIT
+
+## 🤝 Contributing
+
+Contributions welcome! Please read our contributing guidelines and submit PRs.
 
 ---
 
-## 🙏 Acknowledgments
-
-- Built with [Vercel AI SDK](https://sdk.vercel.ai/)
-- Market data via [Replay Labs](https://replaylabs.io) unified API
-- Data sourced from [Kalshi](https://kalshi.com) and [Polymarket](https://polymarket.com)
-
----
-
-<p align="center">
-  <b>Made with ❤️ for the prediction market arbitrage community</b>
-</p>
+Built for safe prediction market arbitrage 🎯
