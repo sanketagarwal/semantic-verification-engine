@@ -58,15 +58,17 @@ yarn add semantic-verification-engine
 Create a `.env` file:
 
 ```env
-# Required: OpenAI API key for LLM analysis
-OPENAI_API_KEY=sk-your-key-here
+# Required: OpenAI API key for LLM semantic analysis
+OPENAI_API_KEY=sk-your-openai-key-here
 
-# Optional: Use specific model
+# Required: Replay Labs API key for all market data
+REPLAY_LABS_API_KEY=your-replay-labs-api-key
+
+# Optional: Replay Labs API base URL
+REPLAY_LABS_BASE_URL=https://api.replaylabs.io
+
+# Optional: Use specific model (default: openai/gpt-4o)
 AI_MODEL=openai/gpt-4o
-
-# Optional: Kalshi API for live data
-KALSHI_API_KEY=your-kalshi-key
-KALSHI_USE_DEMO=false
 ```
 
 ---
@@ -286,9 +288,10 @@ The engine detects 6 types of resolution criteria misalignments:
 │                    Verification Pipeline                         │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  1. MARKET SEARCH                                               │
-│     ├─> Kalshi API (or mock)                                    │
-│     └─> Polymarket Gamma API (or mock)                          │
+│  1. MARKET DATA (via Replay Labs)                               │
+│     ├─> GET /api/kalshi/markets                                 │
+│     ├─> GET /api/polymarket/markets                             │
+│     └─> GET /api/matched-pairs (pre-matched registry)           │
 │                                                                 │
 │  2. SEMANTIC MATCHING                                           │
 │     └─> LLM finds candidate pairs by topic similarity           │
@@ -305,6 +308,9 @@ The engine detects 6 types of resolution criteria misalignments:
 │     └─> SAFE_TO_TRADE | CAUTION | AVOID | REVIEW                │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
+
+Data Flow:
+  Replay Labs API ──> Kalshi + Polymarket Data ──> LLM Analysis ──> Recommendations
 ```
 
 ---
@@ -349,10 +355,10 @@ semantic-verification-engine/
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `OPENAI_API_KEY` | ✅ Yes | OpenAI API key for GPT-4o |
-| `AI_MODEL` | No | Model to use (default: `openai/gpt-4o`) |
-| `KALSHI_API_KEY` | No | Kalshi API key for live data |
-| `KALSHI_USE_DEMO` | No | Use Kalshi demo API (`true`/`false`) |
+| `OPENAI_API_KEY` | ✅ Yes | OpenAI API key for LLM semantic analysis |
+| `REPLAY_LABS_API_KEY` | ✅ Yes | Replay Labs API key for all market data |
+| `REPLAY_LABS_BASE_URL` | No | Replay Labs API URL (default: `https://api.replaylabs.io`) |
+| `AI_MODEL` | No | LLM model to use (default: `openai/gpt-4o`) |
 
 ---
 
@@ -377,7 +383,8 @@ MIT © Sanket Agarwal
 ## 🙏 Acknowledgments
 
 - Built with [Vercel AI SDK](https://sdk.vercel.ai/)
-- Market data from [Kalshi](https://kalshi.com) and [Polymarket](https://polymarket.com)
+- Market data via [Replay Labs](https://replaylabs.io) unified API
+- Data sourced from [Kalshi](https://kalshi.com) and [Polymarket](https://polymarket.com)
 
 ---
 

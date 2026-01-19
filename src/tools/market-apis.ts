@@ -1,7 +1,8 @@
 /**
- * Market API Tools
+ * Market API Tools via Replay Labs
  * 
- * Tools for fetching market data from Kalshi and Polymarket
+ * All market data is fetched through Replay Labs unified API.
+ * Replay Labs aggregates Kalshi and Polymarket data.
  */
 
 import { tool } from 'ai';
@@ -9,25 +10,42 @@ import { z } from 'zod';
 import type { KalshiMarket, PolymarketMarket } from '../types';
 
 // ═══════════════════════════════════════════════════════════════
-// API CONFIGURATION
+// REPLAY LABS API CONFIGURATION
 // ═══════════════════════════════════════════════════════════════
 
-const KALSHI_API_KEY = process.env.KALSHI_API_KEY;
-const KALSHI_BASE_URL = process.env.KALSHI_USE_DEMO === 'true' 
-  ? 'https://demo-api.kalshi.co/trade-api/v2'
-  : 'https://trading-api.kalshi.com/trade-api/v2';
+const REPLAY_LABS_API_KEY = process.env.REPLAY_LABS_API_KEY;
+const REPLAY_LABS_BASE_URL = process.env.REPLAY_LABS_BASE_URL || 'https://api.replaylabs.io';
 
-const POLYMARKET_GAMMA_URL = 'https://gamma-api.polymarket.com';
+async function replayLabsFetch(endpoint: string, options: RequestInit = {}) {
+  if (!REPLAY_LABS_API_KEY) {
+    throw new Error('REPLAY_LABS_API_KEY is required');
+  }
+
+  const response = await fetch(`${REPLAY_LABS_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${REPLAY_LABS_API_KEY}`,
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Replay Labs API error: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
 
 // ═══════════════════════════════════════════════════════════════
-// KALSHI TOOLS
+// KALSHI TOOLS (via Replay Labs)
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * Search Kalshi markets by keyword/topic
+ * Search Kalshi markets via Replay Labs
  */
 export const searchKalshiMarkets = tool({
-  description: `Search Kalshi prediction markets by keyword or topic.
+  description: `Search Kalshi prediction markets via Replay Labs API.
     Returns markets with current prices, volume, and liquidity.`,
   parameters: z.object({
     query: z.string().describe('Search query (e.g., "Fed rates", "inflation", "election")'),
@@ -35,34 +53,21 @@ export const searchKalshiMarkets = tool({
     limit: z.number().min(1).max(50).default(10),
   }),
   execute: async ({ query, status, limit }) => {
-    if (!KALSHI_API_KEY) {
-      return getMockKalshiMarkets(query, limit);
-    }
-
     try {
       const params = new URLSearchParams({
         limit: limit.toString(),
         ...(status !== 'all' && { status }),
       });
 
-      const response = await fetch(`${KALSHI_BASE_URL}/markets?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${KALSHI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Kalshi API error: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await replayLabsFetch(`/api/kalshi/markets?${params}`);
+      
       const queryLower = query.toLowerCase();
-      const filtered = (data.markets || [])
+      const filtered = (data.markets || data || [])
         .filter((m: any) => 
           m.title?.toLowerCase().includes(queryLower) ||
           m.subtitle?.toLowerCase().includes(queryLower) ||
-          m.category?.toLowerCase().includes(queryLower)
+          m.category?.toLowerCase().includes(queryLower) ||
+          m.ticker?.toLowerCase().includes(queryLower)
         )
         .slice(0, limit);
 
@@ -71,44 +76,40 @@ export const searchKalshiMarkets = tool({
         markets: filtered.map(formatKalshiMarket),
         query,
         count: filtered.length,
-        source: 'kalshi',
+        source: 'replay-labs/kalshi',
       };
     } catch (error) {
-      return getMockKalshiMarkets(query, limit);
+      return {
+        success: false,
+        error: String(error),
+        markets: [],
+        query,
+        count: 0,
+        source: 'replay-labs/kalshi',
+      };
     }
   },
 });
 
 /**
- * Get orderbook for a specific Kalshi market
+ * Get orderbook for a specific Kalshi market via Replay Labs
  */
 export const getKalshiOrderbook = tool({
-  description: 'Get the orderbook (bids/asks) for a specific Kalshi market ticker.',
+  description: 'Get the orderbook (bids/asks) for a specific Kalshi market ticker via Replay Labs.',
   parameters: z.object({
     ticker: z.string().describe('Kalshi market ticker'),
   }),
   execute: async ({ ticker }) => {
-    if (!KALSHI_API_KEY) {
-      return getMockOrderbook(ticker);
-    }
-
     try {
-      const response = await fetch(`${KALSHI_BASE_URL}/markets/${ticker}/orderbook`, {
-        headers: { 'Authorization': `Bearer ${KALSHI_API_KEY}` },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Kalshi API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const bids = (data.orderbook?.yes || []).map((o: any) => ({ 
-        price: o.price / 100, 
-        quantity: o.count 
+      const data = await replayLabsFetch(`/api/kalshi/markets/${ticker}/orderbook`);
+      
+      const bids = (data.orderbook?.yes || data.bids || []).map((o: any) => ({ 
+        price: (o.price || o.p) / 100, 
+        quantity: o.count || o.q || o.quantity
       }));
-      const asks = (data.orderbook?.no || []).map((o: any) => ({ 
-        price: (100 - o.price) / 100, 
-        quantity: o.count 
+      const asks = (data.orderbook?.no || data.asks || []).map((o: any) => ({ 
+        price: (100 - (o.price || o.p)) / 100, 
+        quantity: o.count || o.q || o.quantity
       }));
 
       const bestBid = bids[0]?.price || 0;
@@ -116,23 +117,61 @@ export const getKalshiOrderbook = tool({
 
       return {
         success: true,
-        orderbook: { ticker, bids, asks, spread: bestAsk - bestBid, midPrice: (bestBid + bestAsk) / 2 },
+        orderbook: { 
+          ticker, 
+          bids, 
+          asks, 
+          spread: bestAsk - bestBid, 
+          midPrice: (bestBid + bestAsk) / 2 
+        },
+        source: 'replay-labs/kalshi',
       };
     } catch (error) {
-      return getMockOrderbook(ticker);
+      return {
+        success: false,
+        error: String(error),
+        source: 'replay-labs/kalshi',
+      };
+    }
+  },
+});
+
+/**
+ * Get detailed Kalshi market info via Replay Labs
+ */
+export const getKalshiMarketDetails = tool({
+  description: 'Get detailed information about a specific Kalshi market via Replay Labs.',
+  parameters: z.object({
+    ticker: z.string().describe('Kalshi market ticker'),
+  }),
+  execute: async ({ ticker }) => {
+    try {
+      const data = await replayLabsFetch(`/api/kalshi/markets/${ticker}`);
+      
+      return {
+        success: true,
+        market: formatKalshiMarket(data.market || data),
+        source: 'replay-labs/kalshi',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: String(error),
+        source: 'replay-labs/kalshi',
+      };
     }
   },
 });
 
 // ═══════════════════════════════════════════════════════════════
-// POLYMARKET TOOLS
+// POLYMARKET TOOLS (via Replay Labs)
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * Search Polymarket markets by keyword/topic
+ * Search Polymarket markets via Replay Labs
  */
 export const searchPolymarketMarkets = tool({
-  description: `Search Polymarket prediction markets by keyword or topic.
+  description: `Search Polymarket prediction markets via Replay Labs API.
     Returns markets with current prices, volume, and liquidity.`,
   parameters: z.object({
     query: z.string().describe('Search query'),
@@ -146,21 +185,15 @@ export const searchPolymarketMarkets = tool({
         active: active.toString(),
       });
 
-      const response = await fetch(`${POLYMARKET_GAMMA_URL}/markets?${params}`, {
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      if (!response.ok) {
-        return getMockPolymarketMarkets(query, limit);
-      }
-
-      const data = await response.json();
+      const data = await replayLabsFetch(`/api/polymarket/markets?${params}`);
+      
       const queryLower = query.toLowerCase();
-      const filtered = (data || [])
+      const filtered = (data.markets || data || [])
         .filter((m: any) => 
           m.question?.toLowerCase().includes(queryLower) ||
           m.description?.toLowerCase().includes(queryLower) ||
-          m.category?.toLowerCase().includes(queryLower)
+          m.category?.toLowerCase().includes(queryLower) ||
+          m.title?.toLowerCase().includes(queryLower)
         )
         .slice(0, limit);
 
@@ -169,10 +202,132 @@ export const searchPolymarketMarkets = tool({
         markets: filtered.map(formatPolymarketMarket),
         query,
         count: filtered.length,
-        source: 'polymarket',
+        source: 'replay-labs/polymarket',
       };
     } catch (error) {
-      return getMockPolymarketMarkets(query, limit);
+      return {
+        success: false,
+        error: String(error),
+        markets: [],
+        query,
+        count: 0,
+        source: 'replay-labs/polymarket',
+      };
+    }
+  },
+});
+
+/**
+ * Get Polymarket orderbook/spreads via Replay Labs
+ */
+export const getPolymarketOrderbook = tool({
+  description: 'Get orderbook and spreads for a Polymarket token via Replay Labs.',
+  parameters: z.object({
+    tokenId: z.string().describe('Polymarket token ID'),
+  }),
+  execute: async ({ tokenId }) => {
+    try {
+      const data = await replayLabsFetch(`/api/polymarket/clob/book?token_id=${tokenId}`);
+      
+      const bids = (data.bids || []).slice(0, 5).map((b: any) => ({
+        price: parseFloat(b.price || b.p),
+        size: parseFloat(b.size || b.s),
+      }));
+      
+      const asks = (data.asks || []).slice(0, 5).map((a: any) => ({
+        price: parseFloat(a.price || a.p),
+        size: parseFloat(a.size || a.s),
+      }));
+
+      const bestBid = bids[0]?.price || 0;
+      const bestAsk = asks[0]?.price || 1;
+
+      return {
+        success: true,
+        orderbook: {
+          tokenId,
+          bids,
+          asks,
+          spread: bestAsk - bestBid,
+          midPrice: (bestBid + bestAsk) / 2,
+        },
+        source: 'replay-labs/polymarket',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: String(error),
+        source: 'replay-labs/polymarket',
+      };
+    }
+  },
+});
+
+/**
+ * Get spreads for multiple Polymarket tokens via Replay Labs
+ */
+export const getPolymarketSpreads = tool({
+  description: 'Get spreads for multiple Polymarket tokens in one call via Replay Labs.',
+  parameters: z.object({
+    tokenIds: z.array(z.string()).describe('Array of Polymarket token IDs'),
+  }),
+  execute: async ({ tokenIds }) => {
+    try {
+      const data = await replayLabsFetch('/api/polymarket/clob/spreads', {
+        method: 'POST',
+        body: JSON.stringify(tokenIds.map(token_id => ({ token_id }))),
+      });
+
+      return {
+        success: true,
+        spreads: data,
+        source: 'replay-labs/polymarket',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: String(error),
+        source: 'replay-labs/polymarket',
+      };
+    }
+  },
+});
+
+// ═══════════════════════════════════════════════════════════════
+// CROSS-PLATFORM TOOLS (via Replay Labs)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Get matched market pairs from Replay Labs registry
+ */
+export const getMatchedMarketPairs = tool({
+  description: 'Get pre-matched market pairs between Kalshi and Polymarket from Replay Labs.',
+  parameters: z.object({
+    category: z.string().optional().describe('Filter by category'),
+    activeOnly: z.boolean().default(true).describe('Only return active markets'),
+  }),
+  execute: async ({ category, activeOnly }) => {
+    try {
+      const params = new URLSearchParams({
+        ...(category && { category }),
+        active: activeOnly.toString(),
+      });
+
+      const data = await replayLabsFetch(`/api/matched-pairs?${params}`);
+
+      return {
+        success: true,
+        pairs: data.pairs || data || [],
+        count: (data.pairs || data || []).length,
+        source: 'replay-labs',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: String(error),
+        pairs: [],
+        source: 'replay-labs',
+      };
     }
   },
 });
@@ -188,10 +343,10 @@ function formatKalshiMarket(m: any): KalshiMarket {
     subtitle: m.subtitle,
     category: m.category || 'unknown',
     status: m.status || 'open',
-    yesPrice: (m.yes_bid || m.last_price || 50) / 100,
-    noPrice: 1 - (m.yes_bid || m.last_price || 50) / 100,
+    yesPrice: (m.yes_bid || m.yes_price || m.last_price || 50) / 100,
+    noPrice: 1 - (m.yes_bid || m.yes_price || m.last_price || 50) / 100,
     volume: m.volume || 0,
-    liquidity: m.open_interest || 0,
+    liquidity: m.open_interest || m.liquidity || 0,
     expirationTime: m.expiration_time || m.close_time,
     lastTradeTime: m.last_trade_time,
   };
@@ -200,168 +355,19 @@ function formatKalshiMarket(m: any): KalshiMarket {
 function formatPolymarketMarket(m: any): PolymarketMarket {
   const outcomes = (m.outcomes || ['Yes', 'No']).map((name: string, i: number) => ({
     name,
-    price: m.outcomePrices?.[i] ? parseFloat(m.outcomePrices[i]) : 0.5,
+    price: m.outcomePrices?.[i] ? parseFloat(m.outcomePrices[i]) : 
+           m.outcome_prices?.[i] ? parseFloat(m.outcome_prices[i]) : 0.5,
   }));
 
   return {
-    id: m.id || m.condition_id,
+    id: m.id || m.condition_id || m.conditionId,
     question: m.question || m.title,
     description: m.description,
     category: m.category || 'General',
-    endDate: m.end_date_iso || m.endDate,
+    endDate: m.end_date_iso || m.endDate || m.end_date,
     outcomes,
     volume: parseFloat(m.volume || m.volumeNum || '0'),
     liquidity: parseFloat(m.liquidity || m.liquidityNum || '0'),
     active: m.active !== false && m.closed !== true,
-  };
-}
-
-// ═══════════════════════════════════════════════════════════════
-// MOCK DATA (for development/demo)
-// ═══════════════════════════════════════════════════════════════
-
-function getMockKalshiMarkets(query: string, limit: number) {
-  const mockMarkets: KalshiMarket[] = [
-    {
-      ticker: 'FED-26JAN-T4.50',
-      title: 'Will the Fed cut rates in January 2026?',
-      category: 'Economics',
-      status: 'open',
-      yesPrice: 0.72,
-      noPrice: 0.28,
-      volume: 450000,
-      liquidity: 125000,
-      expirationTime: '2026-01-31T23:59:59Z',
-    },
-    {
-      ticker: 'INFLATION-26Q1-A3',
-      title: 'Will CPI inflation be above 3% in Q1 2026?',
-      category: 'Economics',
-      status: 'open',
-      yesPrice: 0.45,
-      noPrice: 0.55,
-      volume: 280000,
-      liquidity: 85000,
-      expirationTime: '2026-04-15T23:59:59Z',
-    },
-    {
-      ticker: 'BTC-26JAN-100K',
-      title: 'Will Bitcoin be above $100,000 by end of January 2026?',
-      category: 'Crypto',
-      status: 'open',
-      yesPrice: 0.62,
-      noPrice: 0.38,
-      volume: 890000,
-      liquidity: 230000,
-      expirationTime: '2026-01-31T23:59:59Z',
-    },
-    {
-      ticker: 'RECESSION-26',
-      title: 'Will there be a US recession in 2026?',
-      category: 'Economics',
-      status: 'open',
-      yesPrice: 0.28,
-      noPrice: 0.72,
-      volume: 520000,
-      liquidity: 145000,
-      expirationTime: '2026-12-31T23:59:59Z',
-    },
-  ];
-
-  const queryLower = query.toLowerCase();
-  const filtered = mockMarkets.filter(m => 
-    m.title.toLowerCase().includes(queryLower) ||
-    m.category.toLowerCase().includes(queryLower) ||
-    m.ticker.toLowerCase().includes(queryLower)
-  );
-
-  return {
-    success: true,
-    markets: filtered.slice(0, limit),
-    query,
-    count: filtered.length,
-    source: 'kalshi-mock',
-  };
-}
-
-function getMockPolymarketMarkets(query: string, limit: number) {
-  const mockMarkets: PolymarketMarket[] = [
-    {
-      id: 'fed-rate-jan-2026',
-      question: 'Will the Federal Reserve cut interest rates in January 2026?',
-      description: 'Resolves YES if the Fed announces a rate cut at the January 2026 FOMC meeting.',
-      category: 'Economics',
-      endDate: '2026-01-31T23:59:59Z',
-      outcomes: [{ name: 'Yes', price: 0.68 }, { name: 'No', price: 0.32 }],
-      volume: 1250000,
-      liquidity: 340000,
-      active: true,
-    },
-    {
-      id: 'btc-100k-jan-2026',
-      question: 'Will Bitcoin reach $100,000 by January 31, 2026?',
-      category: 'Crypto',
-      endDate: '2026-01-31T23:59:59Z',
-      outcomes: [{ name: 'Yes', price: 0.58 }, { name: 'No', price: 0.42 }],
-      volume: 2800000,
-      liquidity: 890000,
-      active: true,
-    },
-    {
-      id: 'inflation-3pct-q1-2026',
-      question: 'Will US CPI inflation be above 3% in Q1 2026?',
-      category: 'Economics',
-      endDate: '2026-04-15T23:59:59Z',
-      outcomes: [{ name: 'Yes', price: 0.42 }, { name: 'No', price: 0.58 }],
-      volume: 560000,
-      liquidity: 180000,
-      active: true,
-    },
-    {
-      id: 'recession-2026',
-      question: 'Will the US enter a recession in 2026?',
-      category: 'Economics',
-      endDate: '2026-12-31T23:59:59Z',
-      outcomes: [{ name: 'Yes', price: 0.25 }, { name: 'No', price: 0.75 }],
-      volume: 1890000,
-      liquidity: 450000,
-      active: true,
-    },
-  ];
-
-  const queryLower = query.toLowerCase();
-  const filtered = mockMarkets.filter(m =>
-    m.question.toLowerCase().includes(queryLower) ||
-    m.category.toLowerCase().includes(queryLower) ||
-    m.description?.toLowerCase().includes(queryLower)
-  );
-
-  return {
-    success: true,
-    markets: filtered.slice(0, limit),
-    query,
-    count: filtered.length,
-    source: 'polymarket-mock',
-  };
-}
-
-function getMockOrderbook(ticker: string) {
-  return {
-    success: true,
-    orderbook: {
-      ticker,
-      bids: [
-        { price: 0.71, quantity: 500 },
-        { price: 0.70, quantity: 1200 },
-        { price: 0.69, quantity: 800 },
-      ],
-      asks: [
-        { price: 0.73, quantity: 450 },
-        { price: 0.74, quantity: 900 },
-        { price: 0.75, quantity: 1100 },
-      ],
-      spread: 0.02,
-      midPrice: 0.72,
-    },
   };
 }

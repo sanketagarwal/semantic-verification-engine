@@ -32,9 +32,14 @@ export {
   generateVerificationReport,
   batchVerifyMarkets,
   quickSimilarityScore,
+  // Replay Labs market APIs
   searchKalshiMarkets,
   getKalshiOrderbook,
+  getKalshiMarketDetails,
   searchPolymarketMarkets,
+  getPolymarketOrderbook,
+  getPolymarketSpreads,
+  getMatchedMarketPairs,
 } from './tools';
 
 // Type exports
