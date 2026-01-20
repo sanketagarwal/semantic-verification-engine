@@ -79,15 +79,15 @@ export const searchMarkets = tool({
   parameters: z.object({
     query: z.string().describe('Search query (e.g., "Fed rates", "Bitcoin", "election")'),
     venue: z.enum(['KALSHI', 'POLYMARKET']).optional().describe('Filter by venue'),
-    active: z.boolean().default(true).describe('Only return active/open markets'),
-    limit: z.number().min(1).max(100).default(20),
+    active: z.boolean().optional().describe('Only return active/open markets'),
+    limit: z.number().min(1).max(100).optional().describe('Max results'),
   }),
-  execute: async ({ query, venue, active, limit }) => {
+  execute: async ({ query, venue, active = true, limit = 20 }) => {
     try {
       const params = new URLSearchParams({
         q: query,
-        active: active.toString(),
-        limit: limit.toString(),
+        active: String(active),
+        limit: String(limit),
       });
       if (venue) params.append('venue', venue);
 
@@ -114,16 +114,16 @@ export const searchKalshiMarkets = tool({
   description: 'Search Kalshi prediction markets via Replay Labs',
   parameters: z.object({
     query: z.string().describe('Search query'),
-    active: z.boolean().default(true),
-    limit: z.number().min(1).max(50).default(10),
+    active: z.boolean().optional().describe('Only active markets'),
+    limit: z.number().min(1).max(50).optional().describe('Max results'),
   }),
-  execute: async ({ query, active, limit }) => {
+  execute: async ({ query, active = true, limit = 10 }) => {
     try {
       const params = new URLSearchParams({
         q: query,
         venue: 'KALSHI',
-        active: active.toString(),
-        limit: limit.toString(),
+        active: String(active),
+        limit: String(limit),
       });
 
       const data = await replayLabsFetch(`/api/markets/search?${params}`);
@@ -148,16 +148,16 @@ export const searchPolymarketMarkets = tool({
   description: 'Search Polymarket prediction markets via Replay Labs',
   parameters: z.object({
     query: z.string().describe('Search query'),
-    active: z.boolean().default(true),
-    limit: z.number().min(1).max(50).default(10),
+    active: z.boolean().optional().describe('Only active markets'),
+    limit: z.number().min(1).max(50).optional().describe('Max results'),
   }),
-  execute: async ({ query, active, limit }) => {
+  execute: async ({ query, active = true, limit = 10 }) => {
     try {
       const params = new URLSearchParams({
         q: query,
         venue: 'POLYMARKET',
-        active: active.toString(),
-        limit: limit.toString(),
+        active: String(active),
+        limit: String(limit),
       });
 
       const data = await replayLabsFetch(`/api/markets/search?${params}`);
@@ -187,19 +187,19 @@ export const semanticSearchMarkets = tool({
   parameters: z.object({
     query: z.string().describe('Natural language query'),
     venue: z.enum(['KALSHI', 'POLYMARKET']).optional(),
-    active: z.boolean().default(true),
-    limit: z.number().min(1).max(100).default(10),
+    active: z.boolean().optional().describe('Only active markets'),
+    limit: z.number().min(1).max(100).optional().describe('Max results'),
     minScore: z.number().min(0).max(1).optional().describe('Minimum similarity score'),
   }),
-  execute: async ({ query, venue, active, limit, minScore }) => {
+  execute: async ({ query, venue, active = true, limit = 10, minScore }) => {
     try {
       const params = new URLSearchParams({
         q: query,
-        active: active.toString(),
-        limit: limit.toString(),
+        active: String(active),
+        limit: String(limit),
       });
       if (venue) params.append('venue', venue);
-      if (minScore) params.append('minScore', minScore.toString());
+      if (minScore !== undefined) params.append('minScore', String(minScore));
 
       const data = await replayLabsFetch(`/api/markets/semantic-search?${params}`);
 
@@ -233,18 +233,18 @@ export const findOverlapMarkets = tool({
     venue: z.enum(['KALSHI', 'POLYMARKET']).describe('Source venue'),
     venuePk: z.string().describe('Market ID on source venue'),
     targetVenue: z.enum(['KALSHI', 'POLYMARKET']).optional().describe('Target venue (defaults to opposite)'),
-    limit: z.number().min(1).max(100).default(5),
+    limit: z.number().min(1).max(100).optional().describe('Max results'),
     minScore: z.number().min(0).max(1).optional().describe('Minimum similarity score'),
   }),
-  execute: async ({ venue, venuePk, targetVenue, limit, minScore }) => {
+  execute: async ({ venue, venuePk, targetVenue, limit = 5, minScore }) => {
     try {
       const params = new URLSearchParams({
         venue,
         venuePk,
-        limit: limit.toString(),
+        limit: String(limit),
       });
       if (targetVenue) params.append('targetVenue', targetVenue);
-      if (minScore) params.append('minScore', minScore.toString());
+      if (minScore !== undefined) params.append('minScore', String(minScore));
 
       const data = await replayLabsFetch(`/api/markets/overlap?${params}`);
 
@@ -276,19 +276,19 @@ export const findSimilarMarkets = tool({
   parameters: z.object({
     venue: z.enum(['KALSHI', 'POLYMARKET']).describe('Source venue'),
     venuePk: z.string().describe('Market ID'),
-    active: z.boolean().default(true),
-    limit: z.number().min(1).max(100).default(5),
-    minScore: z.number().min(0).max(1).optional(),
+    active: z.boolean().optional().describe('Only active markets'),
+    limit: z.number().min(1).max(100).optional().describe('Max results'),
+    minScore: z.number().min(0).max(1).optional().describe('Minimum similarity score'),
   }),
-  execute: async ({ venue, venuePk, active, limit, minScore }) => {
+  execute: async ({ venue, venuePk, active = true, limit = 5, minScore }) => {
     try {
       const params = new URLSearchParams({
         venue,
         venuePk,
-        active: active.toString(),
-        limit: limit.toString(),
+        active: String(active),
+        limit: String(limit),
       });
-      if (minScore) params.append('minScore', minScore.toString());
+      if (minScore !== undefined) params.append('minScore', String(minScore));
 
       const data = await replayLabsFetch(`/api/markets/similar?${params}`);
 
@@ -341,9 +341,9 @@ export const getKalshiMarket = tool({
   description: 'Get a Kalshi market by ticker with current prices',
   parameters: z.object({
     ticker: z.string().describe('Kalshi market ticker'),
-    freshnessMs: z.number().optional().default(5000),
+    freshnessMs: z.number().optional().describe('Price freshness in ms'),
   }),
-  execute: async ({ ticker, freshnessMs }) => {
+  execute: async ({ ticker, freshnessMs = 5000 }) => {
     try {
       const data = await replayLabsFetch(`/api/markets/KALSHI/${ticker}?freshness_ms=${freshnessMs}`);
       return {
@@ -361,9 +361,9 @@ export const getPolymarketMarket = tool({
   description: 'Get a Polymarket market by condition ID with current prices',
   parameters: z.object({
     conditionId: z.string().describe('Polymarket condition ID'),
-    freshnessMs: z.number().optional().default(5000),
+    freshnessMs: z.number().optional().describe('Price freshness in ms'),
   }),
-  execute: async ({ conditionId, freshnessMs }) => {
+  execute: async ({ conditionId, freshnessMs = 5000 }) => {
     try {
       const data = await replayLabsFetch(`/api/markets/POLYMARKET/${conditionId}?freshness_ms=${freshnessMs}`);
       return {
@@ -434,38 +434,40 @@ export const buildWebSocketPayload = tool({
 // FORMAT HELPERS
 // ═══════════════════════════════════════════════════════════════
 
-function formatAsKalshiMarket(m: ReplayLabsMarket): KalshiMarket {
+function formatAsKalshiMarket(m: any): KalshiMarket {
+  // Handle both raw API response and ReplayLabsMarket format
   const yesPrice = m.prices?.['Yes'] ?? m.prices?.['yes'] ?? 0.5;
   return {
-    ticker: m.id,
-    title: m.question || m.symbol || m.id,
-    subtitle: m.metadata?.subtitle,
-    category: m.metadata?.category || 'General',
-    status: m.isOpen ? 'open' : 'closed',
+    ticker: m.id || m.ticker || '',
+    title: m.question || m.symbol || m.id || '',
+    subtitle: m.metadata?.subtitle || m.description || '',
+    category: m.metadata?.category || m.metadata?.seriesTicker || 'General',
+    status: m.isOpen ? 'open' : (m.metadata?.status || 'unknown'),
     yesPrice,
     noPrice: 1 - yesPrice,
-    volume: m.volume24h || 0,
+    volume: m.volume24h || m.volume || 0,
     liquidity: m.metadata?.liquidity || 0,
-    expirationTime: m.metadata?.expirationTime || m.metadata?.endDate,
+    expirationTime: m.closeTime || m.metadata?.expirationTime || m.metadata?.endDate || '',
     lastTradeTime: m.metadata?.lastTradeTime,
   };
 }
 
-function formatAsPolymarketMarket(m: ReplayLabsMarket): PolymarketMarket {
-  const outcomes = (m.outcomes || ['Yes', 'No']).map((name, i) => ({
+function formatAsPolymarketMarket(m: any): PolymarketMarket {
+  // Handle both raw API response and ReplayLabsMarket format
+  const outcomes = (m.outcomes || ['Yes', 'No']).map((name: string, i: number) => ({
     name,
     price: m.prices?.[name] ?? (i === 0 ? 0.5 : 0.5),
   }));
 
   return {
-    id: m.id,
-    question: m.question || m.symbol || m.id,
-    description: m.metadata?.description,
+    id: m.id || m.conditionId || '',
+    question: m.question || m.symbol || m.id || '',
+    description: m.metadata?.description || m.description || '',
     category: m.metadata?.category || 'General',
-    endDate: m.metadata?.endDate || m.metadata?.expirationTime,
+    endDate: m.closeTime || m.metadata?.endDate || m.metadata?.expirationTime || '',
     outcomes,
-    volume: m.volume24h || 0,
+    volume: m.volume24h || m.volume || 0,
     liquidity: m.metadata?.liquidity || 0,
-    active: m.isOpen,
+    active: m.isOpen !== false,
   };
 }
