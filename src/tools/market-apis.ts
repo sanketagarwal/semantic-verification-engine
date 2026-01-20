@@ -16,7 +16,7 @@ import type { KalshiMarket, PolymarketMarket } from '../types';
 // ═══════════════════════════════════════════════════════════════
 
 const REPLAY_LABS_API_KEY = process.env.REPLAY_LABS_API_KEY;
-const REPLAY_LABS_BASE_URL = process.env.REPLAY_LABS_BASE_URL || 'https://api.replaylabs.io';
+const REPLAY_LABS_BASE_URL = process.env.REPLAY_LABS_BASE_URL || 'https://replay-lab-delta.preview.recall.network';
 
 // Venue WebSocket endpoints (from /api/ws/venues)
 type Venue = 'KALSHI' | 'POLYMARKET' | 'COINBASE_EXCHANGE' | 'HYPERLIQUID_PERP';
