@@ -3,6 +3,36 @@
  */
 
 // ═══════════════════════════════════════════════════════════════
+// EMBEDDING TYPES
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Embedding metadata stored with market data
+ */
+export interface EmbeddingMetadata {
+  /** The embedding vector (1536 dimensions for text-embedding-3-small) */
+  vector: number[];
+  /** Model used to generate embedding */
+  model: string;
+  /** Text that was embedded (usually the question) */
+  sourceText: string;
+  /** When the embedding was generated */
+  generatedAt: string;
+}
+
+/**
+ * Market with cached embedding
+ */
+export interface MarketWithEmbedding {
+  id: string;
+  venue: 'KALSHI' | 'POLYMARKET';
+  question: string;
+  description?: string;
+  /** Cached embedding for fast similarity comparison */
+  embedding?: EmbeddingMetadata;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // MARKET TYPES
 // ═══════════════════════════════════════════════════════════════
 
@@ -15,6 +45,8 @@ export interface MarketResolutionCriteria {
   resolutionDate?: string;
   rules?: string[];
   category?: string;
+  /** Cached embedding for fast similarity comparison */
+  embedding?: EmbeddingMetadata;
 }
 
 export interface KalshiMarket {
@@ -29,6 +61,8 @@ export interface KalshiMarket {
   liquidity: number;
   expirationTime: string;
   lastTradeTime?: string;
+  /** Cached embedding for fast similarity comparison */
+  embedding?: EmbeddingMetadata;
 }
 
 export interface PolymarketMarket {
@@ -44,6 +78,8 @@ export interface PolymarketMarket {
   volume: number;
   liquidity: number;
   active: boolean;
+  /** Cached embedding for fast similarity comparison */
+  embedding?: EmbeddingMetadata;
 }
 
 // ═══════════════════════════════════════════════════════════════

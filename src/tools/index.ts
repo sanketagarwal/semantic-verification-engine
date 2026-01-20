@@ -63,6 +63,32 @@ export {
 } from './embeddings';
 
 // ═══════════════════════════════════════════════════════════════
+// EMBEDDING CACHE (for faster repeated comparisons)
+// ═══════════════════════════════════════════════════════════════
+
+export {
+  // Core cache operations
+  getEmbedding,
+  batchGenerateEmbeddings,
+  compareMarketsWithCache,
+  findSimilarFromCache,
+  
+  // Cache management
+  getCacheStats,
+  clearCache,
+  isCached,
+  getCachedMarketIds,
+  
+  // Persistence
+  saveCacheToFile,
+  loadCacheFromFile,
+  
+  // Market enrichment
+  enrichMarketWithEmbedding,
+  enrichMarketsWithEmbeddings,
+} from './embedding-cache';
+
+// ═══════════════════════════════════════════════════════════════
 // TOOL COLLECTIONS (for use with AI SDK)
 // ═══════════════════════════════════════════════════════════════
 
@@ -95,6 +121,21 @@ import {
   smartVerifyPair,
   findBestMatches,
 } from './embeddings';
+
+import {
+  getEmbedding,
+  batchGenerateEmbeddings,
+  compareMarketsWithCache,
+  findSimilarFromCache,
+  getCacheStats,
+  clearCache,
+  isCached,
+  getCachedMarketIds,
+  saveCacheToFile,
+  loadCacheFromFile,
+  enrichMarketWithEmbedding,
+  enrichMarketsWithEmbeddings,
+} from './embedding-cache';
 
 /**
  * All tools for market data access via Replay Labs
@@ -136,10 +177,29 @@ export const embeddingTools = {
 };
 
 /**
+ * Embedding cache for storing embeddings on market metadata
+ */
+export const embeddingCacheTools = {
+  getEmbedding,
+  batchGenerateEmbeddings,
+  compareMarketsWithCache,
+  findSimilarFromCache,
+  getCacheStats,
+  clearCache,
+  isCached,
+  getCachedMarketIds,
+  saveCacheToFile,
+  loadCacheFromFile,
+  enrichMarketWithEmbedding,
+  enrichMarketsWithEmbeddings,
+};
+
+/**
  * Complete toolset for verification agent
  */
 export const allTools = {
   ...marketDataTools,
   ...verificationTools,
   ...embeddingTools,
+  ...embeddingCacheTools,
 };

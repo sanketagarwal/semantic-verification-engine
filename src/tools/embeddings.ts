@@ -121,24 +121,51 @@ export const generateEmbeddings = tool({
 /**
  * Calculate embedding similarity between two market questions
  * This is the FAST pre-filter before GPT-4o verification
+ * 
+ * Supports cached embeddings when market IDs are provided
  */
 export const calculateEmbeddingSimilarity = tool({
   description: `Calculate semantic similarity between two texts using embeddings.
     Much faster and cheaper than LLM comparison (~$0.00004 vs ~$0.02).
-    Use this to pre-filter market pairs before full GPT-4o verification.`,
+    Use this to pre-filter market pairs before full GPT-4o verification.
+    If marketId is provided, embeddings will be cached for future reuse.`,
   parameters: z.object({
     text1: z.string().describe('First text (e.g., Kalshi market question)'),
     text2: z.string().describe('Second text (e.g., Polymarket question)'),
+    market1Id: z.string().optional().describe('Optional market ID for caching'),
+    market2Id: z.string().optional().describe('Optional market ID for caching'),
+    market1Venue: z.enum(['KALSHI', 'POLYMARKET']).optional(),
+    market2Venue: z.enum(['KALSHI', 'POLYMARKET']).optional(),
   }),
-  execute: async ({ text1, text2 }) => {
+  execute: async ({ text1, text2, market1Id, market2Id, market1Venue, market2Venue }) => {
     try {
-      // Generate both embeddings in parallel
-      const [emb1, emb2] = await Promise.all([
-        embed({ model: openai.embedding(EMBEDDING_MODEL), value: text1 }),
-        embed({ model: openai.embedding(EMBEDDING_MODEL), value: text2 }),
-      ]);
+      let emb1Vector: number[];
+      let emb2Vector: number[];
+      let usedCache1 = false;
+      let usedCache2 = false;
       
-      const similarity = cosineSimilarity(emb1.embedding, emb2.embedding);
+      // Use cache if market IDs provided
+      if (market1Id && market1Venue) {
+        const { getEmbedding, isCached } = await import('./embedding-cache');
+        usedCache1 = isCached(market1Id);
+        const emb1 = await getEmbedding(market1Id, text1, market1Venue);
+        emb1Vector = emb1.vector;
+      } else {
+        const result = await embed({ model: openai.embedding(EMBEDDING_MODEL), value: text1 });
+        emb1Vector = result.embedding;
+      }
+      
+      if (market2Id && market2Venue) {
+        const { getEmbedding, isCached } = await import('./embedding-cache');
+        usedCache2 = isCached(market2Id);
+        const emb2 = await getEmbedding(market2Id, text2, market2Venue);
+        emb2Vector = emb2.vector;
+      } else {
+        const result = await embed({ model: openai.embedding(EMBEDDING_MODEL), value: text2 });
+        emb2Vector = result.embedding;
+      }
+      
+      const similarity = cosineSimilarity(emb1Vector, emb2Vector);
       
       // Categorize the similarity
       let category: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
@@ -166,6 +193,10 @@ export const calculateEmbeddingSimilarity = tool({
         recommendation,
         shouldVerifyWithLLM: similarity >= 0.65,
         estimatedCostSaved: similarity < 0.65 ? '$0.02' : '$0.00',
+        cacheInfo: {
+          market1FromCache: usedCache1,
+          market2FromCache: usedCache2,
+        },
       };
     } catch (error) {
       return {
@@ -249,15 +280,18 @@ export const batchEmbeddingSimilarity = tool({
 
 /**
  * Smart verification that uses embeddings first, then LLM only if needed
+ * Now with caching support!
  */
 export const smartVerifyPair = tool({
   description: `Intelligently verify a market pair using embeddings first, then LLM if similarity is high enough.
     Saves ~$0.02 per pair when similarity is below threshold.
+    Embeddings are cached by market ID for faster subsequent comparisons.
     
     Flow:
-    1. Calculate embedding similarity (~$0.00004)
-    2. If similarity < 0.65: Return "UNLIKELY_MATCH" (skip LLM)
-    3. If similarity >= 0.65: Call LLM for full verification (~$0.02)`,
+    1. Check cache for existing embeddings
+    2. Calculate embedding similarity (~$0.00004 if not cached, FREE if cached)
+    3. If similarity < 0.65: Return "UNLIKELY_MATCH" (skip LLM)
+    4. If similarity >= 0.65: Call LLM for full verification (~$0.02)`,
   parameters: z.object({
     kalshiMarket: z.object({
       marketId: z.string(),
@@ -276,13 +310,18 @@ export const smartVerifyPair = tool({
   }),
   execute: async ({ kalshiMarket, polymarketMarket, similarityThreshold = 0.65, skipLLM = false }) => {
     try {
-      // Step 1: Calculate embedding similarity
+      // Step 1: Calculate embedding similarity using cache
+      const { getEmbedding, isCached } = await import('./embedding-cache');
+      
+      const kalshiWasCached = isCached(kalshiMarket.marketId);
+      const polymarketWasCached = isCached(polymarketMarket.marketId);
+      
       const [emb1, emb2] = await Promise.all([
-        embed({ model: openai.embedding(EMBEDDING_MODEL), value: kalshiMarket.question }),
-        embed({ model: openai.embedding(EMBEDDING_MODEL), value: polymarketMarket.question }),
+        getEmbedding(kalshiMarket.marketId, kalshiMarket.question, 'KALSHI'),
+        getEmbedding(polymarketMarket.marketId, polymarketMarket.question, 'POLYMARKET'),
       ]);
       
-      const embeddingSimilarity = cosineSimilarity(emb1.embedding, emb2.embedding);
+      const embeddingSimilarity = cosineSimilarity(emb1.vector, emb2.vector);
       
       // Step 2: Decide whether to proceed to LLM
       if (embeddingSimilarity < similarityThreshold || skipLLM) {
@@ -297,6 +336,11 @@ export const smartVerifyPair = tool({
             ? `Embedding similarity (${(embeddingSimilarity * 100).toFixed(1)}%) below threshold (${(similarityThreshold * 100).toFixed(0)}%) - LLM verification skipped`
             : 'LLM verification skipped by request',
           costSaved: '$0.02',
+          cacheInfo: {
+            kalshiFromCache: kalshiWasCached,
+            polymarketFromCache: polymarketWasCached,
+            embeddingCostSaved: (kalshiWasCached ? '$0.00002' : '$0') + ' + ' + (polymarketWasCached ? '$0.00002' : '$0'),
+          },
           kalshiMarket,
           polymarketMarket,
         };
@@ -329,6 +373,10 @@ export const smartVerifyPair = tool({
         shouldTrade: llmResult.verification?.recommendation === 'SAFE_TO_TRADE',
         reasoning: llmResult.verification?.reasoning,
         misalignments: llmResult.verification?.misalignments,
+        cacheInfo: {
+          kalshiFromCache: kalshiWasCached,
+          polymarketFromCache: polymarketWasCached,
+        },
         kalshiMarket,
         polymarketMarket,
       };
