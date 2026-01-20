@@ -3,6 +3,7 @@
  * 
  * Market APIs: All data via Replay Labs API
  * LLM: Vercel AI Gateway for OpenAI
+ * Embeddings: text-embedding-3-small for fast similarity
  */
 
 // ═══════════════════════════════════════════════════════════════
@@ -43,6 +44,25 @@ export {
 } from './verification';
 
 // ═══════════════════════════════════════════════════════════════
+// EMBEDDING TOOLS (text-embedding-3-small via Vercel AI Gateway)
+// ═══════════════════════════════════════════════════════════════
+
+export {
+  // Core embedding functions
+  generateEmbedding,
+  generateEmbeddings,
+  cosineSimilarity,
+  
+  // Similarity tools
+  calculateEmbeddingSimilarity,
+  batchEmbeddingSimilarity,
+  
+  // Smart verification (embeddings + LLM)
+  smartVerifyPair,
+  findBestMatches,
+} from './embeddings';
+
+// ═══════════════════════════════════════════════════════════════
 // TOOL COLLECTIONS (for use with AI SDK)
 // ═══════════════════════════════════════════════════════════════
 
@@ -66,6 +86,15 @@ import {
   generateVerificationReport,
   batchVerifyMarkets,
 } from './verification';
+
+import {
+  generateEmbedding,
+  generateEmbeddings,
+  calculateEmbeddingSimilarity,
+  batchEmbeddingSimilarity,
+  smartVerifyPair,
+  findBestMatches,
+} from './embeddings';
 
 /**
  * All tools for market data access via Replay Labs
@@ -95,9 +124,22 @@ export const verificationTools = {
 };
 
 /**
+ * Embedding-based tools for fast similarity matching
+ */
+export const embeddingTools = {
+  generateEmbedding,
+  generateEmbeddings,
+  calculateEmbeddingSimilarity,
+  batchEmbeddingSimilarity,
+  smartVerifyPair,
+  findBestMatches,
+};
+
+/**
  * Complete toolset for verification agent
  */
 export const allTools = {
   ...marketDataTools,
   ...verificationTools,
+  ...embeddingTools,
 };

@@ -9,6 +9,7 @@
 - [The Problem](#the-problem)
 - [The Solution](#the-solution)
 - [How It Works](#how-it-works)
+- [Vectorized Search (NEW!)](#vectorized-search-new)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Full Demo](#full-demo)
@@ -132,6 +133,92 @@ Use GPT-4o to compare resolution criteria and detect misalignments.
 | `SCOPE` | Different geographic/demographic | US vs Global | HIGH |
 | `DEFINITION` | Core concept differs | Different "recession" definitions | CRITICAL |
 | `EDGE_CASE` | Edge cases handled differently | What if on a holiday? | MEDIUM |
+
+---
+
+## Vectorized Search (NEW!)
+
+We now use **OpenAI embeddings** (`text-embedding-3-small`) as a fast pre-filter before expensive GPT-4o verification.
+
+### Why Embeddings?
+
+| Method | Cost | Speed | Accuracy |
+|--------|------|-------|----------|
+| GPT-4o Verification | ~$0.02/pair | 2-3 seconds | High (rule comparison) |
+| Embedding Similarity | ~$0.00004/pair | 100ms | Good (semantic similarity) |
+
+**500x cheaper, 20x faster** for filtering out non-matches!
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   SMART VERIFICATION FLOW                       │
+│                                                                 │
+│   ┌─────────────┐         ┌─────────────┐         ┌──────────┐ │
+│   │  Embedding  │  <65%   │   SKIP      │         │  SAVE    │ │
+│   │  Similarity │ ──────> │   LLM       │ ──────> │  $0.02   │ │
+│   │  (~$0.00004)│         │             │         │          │ │
+│   └──────┬──────┘         └─────────────┘         └──────────┘ │
+│          │                                                      │
+│          │ ≥65%                                                 │
+│          ▼                                                      │
+│   ┌─────────────┐         ┌─────────────┐                      │
+│   │  GPT-4o     │         │  Detailed   │                      │
+│   │  Verification│ ──────> │  Result     │                      │
+│   │  (~$0.02)   │         │             │                      │
+│   └─────────────┘         └─────────────┘                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Example Results
+
+```
+Test: Batch compare 5 market pairs
+
+🟢  93.2% | Trump approval above 50%?      vs Trump approval rating over 50%
+🟢  83.4% | Will Bitcoin hit $100k?        vs Will BTC reach $100,000?
+🟢  69.7% | Will the Fed cut rates?        vs Fed interest rate cut in 2026?
+🔴  36.7% | Will ETH reach $5000?          vs Will there be a recession?
+🔴  14.9% | Will it rain in NYC?           vs Bitcoin price above $200k?
+
+Summary:
+  - Need LLM verification: 3 pairs (🟢)
+  - Skip LLM: 2 pairs (🔴)
+  - 💰 Cost saved: $0.04
+```
+
+### Quick Start with Embeddings
+
+```typescript
+import { smartVerifyPair } from 'semantic-verification-engine';
+
+// Automatically uses embeddings first, then LLM if needed
+const result = await smartVerifyPair.execute({
+  kalshiMarket: { 
+    marketId: "BTC-100K", 
+    question: "Will Bitcoin be above $100k?" 
+  },
+  polymarketMarket: { 
+    marketId: "btc-100k", 
+    question: "Will Bitcoin reach $100,000?" 
+  },
+});
+
+console.log(result.method);              // "embedding_plus_llm" or "embedding_only"
+console.log(result.embeddingSimilarity); // 0.88
+console.log(result.recommendation);      // "SAFE_TO_TRADE" | "AVOID" etc.
+console.log(result.costSaved);           // "$0.02" if LLM skipped
+```
+
+### Embedding Tools
+
+| Tool | Description |
+|------|-------------|
+| `calculateEmbeddingSimilarity` | Compare two texts, get similarity 0-1 |
+| `batchEmbeddingSimilarity` | Compare many pairs at once (up to 50) |
+| `smartVerifyPair` | Auto: embedding → LLM only if similarity ≥65% |
+| `findBestMatches` | Find top N matches from a list |
 
 ### Recommendations
 
@@ -540,6 +627,59 @@ Get a single Polymarket market with current prices.
 await getPolymarketMarket.execute({
   conditionId: string,
   freshnessMs?: number
+})
+```
+
+### Embedding Tools (NEW!)
+
+#### `calculateEmbeddingSimilarity`
+Fast similarity check between two texts using embeddings (~$0.00004).
+
+```typescript
+await calculateEmbeddingSimilarity.execute({
+  text1: string,  // e.g., Kalshi question
+  text2: string   // e.g., Polymarket question
+})
+// Returns: { similarity: 0.88, category: 'HIGH', shouldVerifyWithLLM: true }
+```
+
+#### `batchEmbeddingSimilarity`
+Compare up to 50 market pairs in one API call.
+
+```typescript
+await batchEmbeddingSimilarity.execute({
+  pairs: Array<{
+    id: string,
+    kalshiQuestion: string,
+    polymarketQuestion: string
+  }>,
+  minSimilarity?: number  // Filter threshold (default: 0.5)
+})
+// Returns sorted results + summary of how many need LLM verification
+```
+
+#### `smartVerifyPair` ⭐
+**The recommended way to verify!** Uses embeddings first, calls GPT-4o only if needed.
+
+```typescript
+await smartVerifyPair.execute({
+  kalshiMarket: { marketId: string, question: string, ... },
+  polymarketMarket: { marketId: string, question: string, ... },
+  similarityThreshold?: number,  // Default: 0.65
+  skipLLM?: boolean              // Force embedding-only mode
+})
+// Returns full verification if similarity high, or quick result if skipped
+```
+
+#### `findBestMatches`
+Given one market, find the best matches from a list using embeddings.
+
+```typescript
+await findBestMatches.execute({
+  sourceQuestion: string,
+  candidateMarkets: Array<{ id: string, question: string }>,
+  topK?: number,        // Default: 5
+  minSimilarity?: number // Default: 0.5
 })
 ```
 
