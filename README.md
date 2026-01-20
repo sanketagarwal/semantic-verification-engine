@@ -549,11 +549,12 @@ await getPolymarketMarket.execute({
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `REPLAY_LABS_API_KEY` | ✅ | API key for Replay Labs (market data) |
-| `AI_GATEWAY_API_KEY` | ✅ | Vercel AI Gateway key (or use `OPENAI_API_KEY`) |
-| `OPENAI_API_KEY` | ⬜ | Fallback if no AI_GATEWAY_API_KEY |
-| `AI_MODEL` | ⬜ | Model to use (default: `gpt-4o`) |
-| `REPLAY_LABS_BASE_URL` | ⬜ | Override API URL |
+| `REPLAY_LABS_API_KEY` | ✅ | Replay Labs API key - **ALL market data** (Kalshi + Polymarket) |
+| `AI_GATEWAY_API_KEY` | ✅ | Vercel AI Gateway key for GPT-4o verification |
+| `REPLAY_LABS_BASE_URL` | ⬜ | Override API URL (default: `https://replay-lab-delta.preview.recall.network`) |
+| `AI_MODEL` | ⬜ | Override model (default: `gpt-4o`) |
+
+> **Note:** No direct Kalshi or Polymarket API keys needed! All market data comes from Replay Labs.
 
 ---
 
