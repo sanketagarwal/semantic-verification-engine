@@ -3,9 +3,13 @@
  * 
  * Core verification tools for comparing resolution criteria between
  * Polymarket and Kalshi markets to detect technical misalignments.
+ * 
+ * Uses Vercel AI Gateway for OpenAI access.
+ * Base URL: https://ai-gateway.vercel.sh/v1
  */
 
 import { tool, generateText } from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
 import type {
   MarketResolutionCriteria,
@@ -13,6 +17,18 @@ import type {
   Misalignment,
   Recommendation,
 } from '../types';
+
+// ═══════════════════════════════════════════════════════════════
+// VERCEL AI GATEWAY CONFIGURATION
+// ═══════════════════════════════════════════════════════════════
+
+const openai = createOpenAI({
+  apiKey: process.env.AI_GATEWAY_API_KEY || process.env.OPENAI_API_KEY,
+  baseURL: 'https://ai-gateway.vercel.sh/v1',
+});
+
+// Default model via Vercel AI Gateway
+const DEFAULT_MODEL = 'gpt-4o';
 
 // ═══════════════════════════════════════════════════════════════
 // LLM VERIFICATION PROMPTS
@@ -150,9 +166,9 @@ export const verifyMarketPair = tool({
         ...polymarketMarket 
       };
       
-      // Use LLM for semantic comparison
+      // Use LLM for semantic comparison via Vercel AI Gateway
       const result = await generateText({
-        model: (process.env.AI_MODEL || 'openai/gpt-4o') as any,
+        model: openai(process.env.AI_MODEL || DEFAULT_MODEL),
         system: VERIFICATION_SYSTEM_PROMPT,
         prompt: MARKET_COMPARISON_PROMPT(market1, market2),
         maxTokens: 2000,
@@ -241,7 +257,7 @@ Return JSON array:
 Only include pairs with similarity >= ${minSimilarity}.`;
 
       const result = await generateText({
-        model: (process.env.AI_MODEL || 'openai/gpt-4o') as any,
+        model: openai(process.env.AI_MODEL || DEFAULT_MODEL),
         system: 'You are an expert at matching equivalent prediction markets across different platforms.',
         prompt: matchPrompt,
         maxTokens: 2000,

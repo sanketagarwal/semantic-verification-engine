@@ -1,35 +1,37 @@
 /**
  * Semantic Verification Engine - Tool Exports
  * 
- * Market APIs: Uses Replay Labs WebSocket infrastructure + direct venue APIs for discovery
- * Verification: LLM-powered semantic comparison of market resolution criteria
+ * Market APIs: All data via Replay Labs API
+ * LLM: Vercel AI Gateway for OpenAI
  */
 
 // ═══════════════════════════════════════════════════════════════
-// MARKET DATA TOOLS (via Replay Labs + Venue APIs)
+// MARKET DATA TOOLS (via Replay Labs)
 // ═══════════════════════════════════════════════════════════════
 
 export {
-  // Replay Labs WebSocket tools
-  listWebSocketVenues,
-  buildWebSocketPayload,
-  
-  // Market discovery
+  // Unified market search
+  searchMarkets,
   searchKalshiMarkets,
   searchPolymarketMarkets,
   
-  // Orderbook streaming configs
-  getKalshiOrderbook,
-  getPolymarketOrderbook,
+  // Semantic & similarity search
+  semanticSearchMarkets,
+  findOverlapMarkets,
+  findSimilarMarkets,
   
-  // Crypto data (Coinbase via Replay Labs)
-  getOHLCV,
-  getIndicators,
-  listReplays,
+  // Single market details
+  getMarket,
+  getKalshiMarket,
+  getPolymarketMarket,
+  
+  // WebSocket config
+  listWebSocketVenues,
+  buildWebSocketPayload,
 } from './market-apis';
 
 // ═══════════════════════════════════════════════════════════════
-// SEMANTIC VERIFICATION TOOLS
+// SEMANTIC VERIFICATION TOOLS (via Vercel AI Gateway)
 // ═══════════════════════════════════════════════════════════════
 
 export {
@@ -37,7 +39,7 @@ export {
   findMatchingMarkets,
   generateVerificationReport,
   batchVerifyMarkets,
-  getVerifiedPairs,
+  quickSimilarityScore,
 } from './verification';
 
 // ═══════════════════════════════════════════════════════════════
@@ -45,15 +47,17 @@ export {
 // ═══════════════════════════════════════════════════════════════
 
 import {
-  listWebSocketVenues,
-  buildWebSocketPayload,
+  searchMarkets,
   searchKalshiMarkets,
   searchPolymarketMarkets,
-  getKalshiOrderbook,
-  getPolymarketOrderbook,
-  getOHLCV,
-  getIndicators,
-  listReplays,
+  semanticSearchMarkets,
+  findOverlapMarkets,
+  findSimilarMarkets,
+  getMarket,
+  getKalshiMarket,
+  getPolymarketMarket,
+  listWebSocketVenues,
+  buildWebSocketPayload,
 } from './market-apis';
 
 import {
@@ -61,33 +65,33 @@ import {
   findMatchingMarkets,
   generateVerificationReport,
   batchVerifyMarkets,
-  getVerifiedPairs,
 } from './verification';
 
 /**
- * All tools for market data access
+ * All tools for market data access via Replay Labs
  */
 export const marketDataTools = {
-  listWebSocketVenues,
-  buildWebSocketPayload,
+  searchMarkets,
   searchKalshiMarkets,
   searchPolymarketMarkets,
-  getKalshiOrderbook,
-  getPolymarketOrderbook,
-  getOHLCV,
-  getIndicators,
-  listReplays,
+  semanticSearchMarkets,
+  findOverlapMarkets,
+  findSimilarMarkets,
+  getMarket,
+  getKalshiMarket,
+  getPolymarketMarket,
+  listWebSocketVenues,
+  buildWebSocketPayload,
 };
 
 /**
- * All tools for semantic verification
+ * All tools for semantic verification via Vercel AI Gateway
  */
 export const verificationTools = {
   verifyMarketPair,
   findMatchingMarkets,
   generateVerificationReport,
   batchVerifyMarkets,
-  getVerifiedPairs,
 };
 
 /**
